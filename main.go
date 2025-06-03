@@ -3,20 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
-	"database/sql"
+	ora "alrogozin/pkg/orcl"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	flags "github.com/jessevdk/go-flags"
+	"github.com/jmoiron/sqlx"
 	yaml "github.com/kylelemons/go-gypsy/yaml"
-	_ "github.com/mattn/go-oci8"
+
+	// _ "github.com/mattn/go-oci8"
+	"go.uber.org/zap"
 	// "database/sql"
 	// _ "github.com/mattn/go-oci8"
 )
@@ -29,13 +28,16 @@ var args = []string{}
 var files = []os.FileInfo{}
 var mToken string = ""
 var mChannelChatID int64
+var mChannelChatIDBil int64
 var mSTimeout int64
 var config *yaml.File
 var bot *tgbotapi.BotAPI
 
 var sqlQueryNewData, sqlInsert string
 var orclCstring string
-var db *sql.DB
+
+// var db *sql.DB
+var orcl *sqlx.DB = nil
 
 // MsgUnit is "id, num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send string"
 type MsgUnit struct {
@@ -53,6 +55,7 @@ type MsgUnit struct {
 	dateSend  string
 	contentId int
 	hashVal   string
+	SbsCode   string
 }
 
 func (mu MsgUnit) Display() string {
@@ -75,6 +78,9 @@ func (mu MsgUnit) Display() string {
 
 // ------------------------------------------------------
 func init() {
+	// Инициализация - параметры, config
+	zap.ReplaceGlobals(zap.Must(zap.NewDevelopment()))
+	// common.InitConfig()
 
 	// обработка параметров запуска
 	_, err := flags.Parse(&opts)
@@ -99,6 +105,10 @@ func init() {
 	mChannelChatID, err = config.GetInt("ChatID")
 	if err != nil {
 		fmt.Println(err, "#2")
+	}
+	mChannelChatIDBil, err = config.GetInt("ChatID$Bil")
+	if err != nil {
+		fmt.Println(err, "#2$bil")
 	}
 
 	mSTimeout, err = config.GetInt("s_timeout")
@@ -129,55 +139,36 @@ func init() {
 
 }
 
-
 // ------------------------------------------------------
 func main() {
-	for {
-		// Open DB connection
-		var err error
-		db, err = sql.Open("oci8", orclCstring)
-		if err != nil {
-			log.Fatal(err)
-		}
+	// Соединение с БД
+	// mvk/mvkprod$@172.16.27.8:1521/billapp?PROTOCOL=TCP
+	orcl = ora.GetConnection("BILLAPP", "172.16.27.8", 1521, "MVK", "MVKPROD$")
+	defer orcl.Close()
 
+	for {
 		// Read again the config file
-		config, err = yaml.ReadFile(opts.Cfg)
+		config, err := yaml.ReadFile(opts.Cfg)
 		if err != nil {
 			fmt.Println(err)
 		}
+
 		mSTimeout, err = config.GetInt("s_timeout")
 		if err != nil {
 			mSTimeout = 120
 		}
 
-		print(time.Now().Format("02.01.2006 15:04:05") + " Starting...")
+		zap.L().Info(time.Now().Format("02.01.2006 15:04:05") + " Starting...")
 
 		// Get new jopex messages
 		MsgUnits := orclGetNewData()
+		zap.L().Sugar().Infof("%d", len(MsgUnits))
 
 		// Form tlgrm meessage and send them
 		for _, mu := range MsgUnits {
 			// Отправить сообщение в telegram
-			sendTlgrmMessage(mu.Display())
+			sendTlgrmMessage(mu.Display(), mu.SbsCode)
 			saveJopexData(mu)
-		}
-
-		// defer close database
-		/*
-			defer func() {
-				err = db.Close()
-				if err != nil {
-					fmt.Println("Close error is not nil:", err)
-				} else {
-					println("DB connection closed")
-				}
-			}()
-		*/
-		err = db.Close()
-		if err != nil {
-			fmt.Println("Close error is not nil:", err)
-		} else {
-			println(strconv.Itoa(len(MsgUnits)) + " messages sent. Next in " + strconv.Itoa((int(mSTimeout))) + " sec")
 		}
 
 		time.Sleep(time.Duration(mSTimeout) * time.Second)
@@ -185,8 +176,13 @@ func main() {
 }
 
 // ------------------------------------------------------
-func sendTlgrmMessage(mMessage string) {
-	msg := tgbotapi.NewMessage(-mChannelChatID, mMessage)
+func sendTlgrmMessage(mMessage string, p_sbs_code string) {
+	var msg tgbotapi.MessageConfig
+	if p_sbs_code == "MVK" {
+		msg = tgbotapi.NewMessage(-mChannelChatID, mMessage)
+	} else {
+		msg = tgbotapi.NewMessage(-mChannelChatIDBil, mMessage)
+	}
 	_, err := bot.Send(msg)
 	if err != nil {
 		fmt.Println(err, "#4")
@@ -194,6 +190,7 @@ func sendTlgrmMessage(mMessage string) {
 }
 
 // ------------------------------------------------------
+/*
 func fillFileArray(pDirPath string) {
 	tFiles, err := ioutil.ReadDir(pDirPath)
 	if err != nil {
@@ -211,14 +208,14 @@ func fillFileArray(pDirPath string) {
 	}
 
 }
-
+*/
 // ------------------------------------------------------
 func saveJopexData(mu MsgUnit) {
 	// var result sql.Result
 	// insert into MAIL_TASK_SEND_TG(task_id, content_id, hash, date_mng) values (:1, :2, :3, :4)
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
-	_, err = db.ExecContext(ctx, sqlInsert, mu.id, mu.contentId, mu.hashVal, time.Now())
+	_, err = orcl.ExecContext(ctx, sqlInsert, mu.id, mu.contentId, mu.hashVal, time.Now())
 	cancel()
 	if err != nil {
 		fmt.Println("ExecContext error is not nil:", err)
@@ -229,21 +226,21 @@ func saveJopexData(mu MsgUnit) {
 // ------------------------------------------------------
 func orclGetNewData() []MsgUnit {
 	var retValue []MsgUnit
-	rows, err := db.Query(sqlQueryNewData)
+	rows, err := orcl.Query(sqlQueryNewData)
 	if err != nil {
 		fmt.Println(err.Error(), sqlQueryNewData)
-		log.Fatalln("err:", err)
+		panic(err)
 	}
 
 	var (
-		num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send, hash_val string
-		id, content_id                                                                                                      int
+		num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send, hash_val, sbs_code string
+		id, content_id                                                                                                                int
 		// content string
 	)
 
 	for rows.Next() {
-		if err = rows.Scan(&id, &num_pp, &header, &content, &min_dtime, &max_dtime, &date_end, &tss_name, &prs_name, &from_name, &is_mvk, &date_send, &content_id, &hash_val); err != nil {
-			log.Fatalln("error fetching", err)
+		if err = rows.Scan(&id, &num_pp, &header, &content, &min_dtime, &max_dtime, &date_end, &tss_name, &prs_name, &from_name, &is_mvk, &date_send, &content_id, &hash_val, &sbs_code); err != nil {
+			panic(err)
 		}
 		mu := &MsgUnit{
 			id:        id,
@@ -260,6 +257,7 @@ func orclGetNewData() []MsgUnit {
 			isMvk:     is_mvk,
 			contentId: content_id,
 			hashVal:   hash_val,
+			SbsCode:   sbs_code,
 		}
 		retValue = append(retValue, *mu)
 	}

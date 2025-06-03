@@ -1,6 +1,6 @@
 # конфигурационный файл
 
-orcl_cstring: mvk/xxxxxx@172.16.27.9:1521/billapp?PROTOCOL=TCP
+orcl_cstring: mvk/mvkprod$@172.16.27.8:1521/billapp?PROTOCOL=TCP
 
 # каталог, где лежать исхфайлы rtf
 source_file_dir: .\\source\\
@@ -10,15 +10,16 @@ source_file_dir: .\\source\\
 # bot_token: 426735857:AAHHwkLw8dj1vhHLon_6j0c0P9Hgd2_6sis
 
 # JopexBot
-bot_token: 11111
+bot_token: 1203820530:AAHSJ6DXfl4rGrM21VAXDT8bQVOaa9wVHEs
 
-s_timeout: 120
+s_timeout: 200
 
 # @jopex_channel chat_id
-ChatID: 122222
+ChatID: 1001331994413
+ChatID$Bil: 1002528114034
 
 # Основной запрос - полуение свежих запросов из JOPEX
-Sql_NewData: Select id, num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send, content_id, hash_val From urq_vtask_unread_tg where rownum < 3
+Sql_NewData: Select id, num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send, content_id, hash_val, sbs_code From urq_vtask_unread_tg where rownum < 3
 # Select id, num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send From urq_vtask_unread_tg where rownum < 3
 # Select content From urq_vtask_unread_tg where rownum < 3
 
