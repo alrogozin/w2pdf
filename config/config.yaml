@@ -19,7 +19,7 @@ ChatID: 1001331994413
 ChatID$Bil: 1002528114034
 
 # Основной запрос - полуение свежих запросов из JOPEX
-Sql_NewData: Select id, num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send, content_id, hash_val, sbs_code From urq_vtask_unread_tg where rownum < 3
+Sql_NewData: Select id, num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send, content_id, hash_val, sbs_code From urq_vtask_unread_tg where rownum < 10
 # Select id, num_pp, header, content, min_dtime, max_dtime, date_end, tss_name, prs_name, from_name, is_mvk, date_send From urq_vtask_unread_tg where rownum < 3
 # Select content From urq_vtask_unread_tg where rownum < 3
 
