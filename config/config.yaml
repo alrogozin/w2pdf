@@ -5,13 +5,6 @@ orcl_cstring: mvk/mvkprod$@172.16.27.8:1521/billapp?PROTOCOL=TCP
 # каталог, где лежать исхфайлы rtf
 source_file_dir: .\\source\\
 
-# telegram bot api token
-# Jopex channel
-# bot_token: 426735857:AAHHwkLw8dj1vhHLon_6j0c0P9Hgd2_6sis
-
-# JopexBot
-bot_token: 1203820530:AAHSJ6DXfl4rGrM21VAXDT8bQVOaa9wVHEs
-
 s_timeout: 200
 
 # @jopex_channel chat_id

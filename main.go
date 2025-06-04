@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
+	"runtime"
 	"strings"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	flags "github.com/jessevdk/go-flags"
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	yaml "github.com/kylelemons/go-gypsy/yaml"
 
 	// _ "github.com/mattn/go-oci8"
@@ -82,8 +85,29 @@ func init() {
 	zap.ReplaceGlobals(zap.Must(zap.NewDevelopment()))
 	// common.InitConfig()
 
+	// Загрузка переменных окружения из .env
+	// .env должен лежать в папке, откуда запукается .exe
+	AppDir, err := GetAppDir()
+	if err != nil {
+		panic(err)
+	}
+	// env_file_path := path.Join(path.Join(AppDir, ".."), "config/.env")
+	env_file_path := path.Join(AppDir, "config/.env")
+
+	if err := godotenv.Load(env_file_path); err != nil {
+		panic("No .env file found " + err.Error())
+	}
+
+	// OS env
+	mToken, exists := os.LookupEnv("BOT_TOKEN")
+	if exists {
+		zap.L().Info(mToken)
+	} else {
+		panic("OS param PASSWORD does not exist")
+	}
+
 	// обработка параметров запуска
-	_, err := flags.Parse(&opts)
+	_, err = flags.Parse(&opts)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -94,12 +118,13 @@ func init() {
 	if err != nil {
 		fmt.Println(err)
 	}
-
-	// Telegram bot
-	mToken, err = config.Get("bot_token")
-	if err != nil {
-		fmt.Println(err)
-	}
+	/*
+		// Telegram bot
+		mToken, err = config.Get("bot_token")
+		if err != nil {
+			fmt.Println(err)
+		}
+	*/
 
 	// Chat_id of the private channel: @jopex_channel
 	mChannelChatID, err = config.GetInt("ChatID")
@@ -146,6 +171,8 @@ func main() {
 	orcl = ora.GetConnection("BILLAPP", "172.16.27.8", 1521, "MVK", "MVKPROD$")
 	defer orcl.Close()
 
+	zap.L().Info(time.Now().Format("02.01.2006 15:04:05") + " Starting...")
+
 	for {
 		// Read again the config file
 		config, err := yaml.ReadFile(opts.Cfg)
@@ -158,11 +185,9 @@ func main() {
 			mSTimeout = 120
 		}
 
-		zap.L().Info(time.Now().Format("02.01.2006 15:04:05") + " Starting...")
-
 		// Get new jopex messages
 		MsgUnits := orclGetNewData()
-		zap.L().Sugar().Infof("%d", len(MsgUnits))
+		zap.L().Sugar().Infof("Сформировано %d сообщений", len(MsgUnits))
 
 		// Form tlgrm meessage and send them
 		for _, mu := range MsgUnits {
@@ -262,4 +287,14 @@ func orclGetNewData() []MsgUnit {
 		retValue = append(retValue, *mu)
 	}
 	return retValue
+}
+
+func GetAppDir() (string, error) {
+	_, filename, _, _ := runtime.Caller(0)
+	dir := path.Join(path.Dir(filename))
+	err := os.Chdir(dir)
+	if err != nil {
+		return "", err
+	}
+	return dir, nil
 }
